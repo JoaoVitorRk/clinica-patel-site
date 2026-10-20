@@ -206,7 +206,7 @@ if (demo) {
     if (tipo === 'tel') {
       tit.textContent = 'Ligar para a clínica';
       txt.textContent = 'No site final, este botão liga para o telefone da Clínica Patel.';
-      msg.textContent = '(42) 99990-4435 · número que aparece hoje no Google e no Linktree, a confirmar';
+      msg.textContent = '(42) 99990-4435, o número da clínica no Google';
     } else if (tipo === 'proc') {
       tit.textContent = el.dataset.proc || 'Procedimento';
       txt.textContent = 'No site final, cada procedimento tem a própria página: o que é, para quem é e para quem não é, como é feito, cuidados, riscos, quem faz e as dúvidas mais comuns. Esta prévia mostra uma delas como exemplo.';
