@@ -1,13 +1,28 @@
 // Clínica Patel · Saúde e Estética · prévia RK Performance · out/2026
 document.documentElement.classList.add('js');
 
+// Recarregar ou abrir o link começa sempre no topo (o navegador devolvia a pessoa ao meio da página).
+// Só o botão voltar do navegador mantém a posição em que a pessoa estava.
+const tipoNav = ((performance.getEntriesByType && performance.getEntriesByType('navigation')[0]) || {}).type || 'navigate';
+// O navegador decide se restaura pela regra que a página tinha antes, então a restauração fica sempre manual:
+// a posição é guardada ao sair e devolvida só quando a pessoa volta pelo botão voltar.
+const chaveY = 'patel-y:' + location.pathname;
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+addEventListener('pagehide', () => { try { sessionStorage.setItem(chaveY, String(Math.round(scrollY))); } catch (e) {} });
+if (tipoNav === 'back_forward') {
+  let y = 0;
+  try { y = parseInt(sessionStorage.getItem(chaveY), 10) || 0; } catch (e) {}
+  const volta = () => scrollTo(0, y);
+  if (y) { addEventListener('DOMContentLoaded', volta); addEventListener('load', volta); }
+} else if (!location.hash) scrollTo(0, 0);
+
 const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const sai = t => 1 - Math.pow(1 - t, 3);
 
 // ---------- abertura: o nome PATEL como janela da foto ----------
 // A abertura roda sozinha: o símbolo se desenha, as letras crescem a partir da haste do T
 // até a foto ocupar a tela inteira e aí entram o título e o botão (cerca de 2,5 s).
-// Se a pessoa rolar, tocar ou usar o teclado antes do fim, a abertura acelera e termina.
+// Se a pessoa rolar ou usar o teclado antes do fim, a abertura acelera e termina.
 const capa = document.getElementById('capa');
 if (capa) {
   const pin = capa.querySelector('.capa-pin');
@@ -103,16 +118,16 @@ if (capa) {
     capa.classList.add('aberta');
     document.documentElement.classList.add('capa-aberta');
     dispatchEvent(new Event('scroll')); // atualiza o topo e o botão fixo
-    try { sessionStorage.setItem('patel-abertura', '1'); } catch (e) {}
   }
-  // rolou, tocou ou apertou tecla durante a abertura: termina rápido
-  const apressa = () => {
+  // rolou ou apertou tecla durante a abertura: termina rápido
+  const apressa = ev => {
     if (aberta) return;
+    if (ev && ev.type === 'scroll' && scrollY < 12) return; // o scrollTo(0, 0) do início não conta como rolagem
     clearTimeout(espera);
     if (!rodando) comeca(RAPIDA);
     else { dur = RAPIDA; t0 = performance.now() - P * dur; }
   };
-  ['wheel', 'touchmove', 'keydown', 'scroll'].forEach(ev => addEventListener(ev, apressa, { passive: true }));
+  ['wheel', 'keydown', 'scroll'].forEach(ev => addEventListener(ev, apressa, { passive: true }));
 
   // símbolo: desenha o contorno e depois preenche
   const tracos = [...simb.querySelectorAll('path')];
@@ -123,11 +138,10 @@ if (capa) {
     if (iniciou) return; iniciou = true;
     medir();
     requestAnimationFrame(() => capa.classList.add('pronta'));
-    let vista = false;
-    try { vista = sessionStorage.getItem('patel-abertura') === '1'; } catch (e) {}
     const reduz = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    // movimento reduzido, volta para a página na mesma visita ou link direto para uma seção: sem abertura
-    if (reduz || vista || scrollY > innerHeight * 0.4) termina();
+    // a abertura roda a cada visita e a cada recarga; só pula com movimento reduzido,
+    // com o botão voltar do navegador ou com link direto para uma seção (#procedimentos etc.)
+    if (reduz || tipoNav === 'back_forward' || location.hash || scrollY > innerHeight * 0.4) termina();
     else espera = setTimeout(() => comeca(DURACAO), ESPERA);
   };
   if (document.fonts && document.fonts.load) {
