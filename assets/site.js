@@ -5,8 +5,9 @@ const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const sai = t => 1 - Math.pow(1 - t, 3);
 
 // ---------- abertura: o nome PATEL como janela da foto ----------
-// A capa fica presa na tela enquanto a pessoa rola: as letras crescem a partir da haste do T
-// até a foto ocupar a tela inteira; aí entram o título e o botão.
+// A abertura roda sozinha: o símbolo se desenha, as letras crescem a partir da haste do T
+// até a foto ocupar a tela inteira e aí entram o título e o botão (cerca de 2,5 s).
+// Se a pessoa rolar, tocar ou usar o teclado antes do fim, a abertura acelera e termina.
 const capa = document.getElementById('capa');
 if (capa) {
   const pin = capa.querySelector('.capa-pin');
@@ -22,7 +23,10 @@ if (capa) {
   const simb = cab.querySelector('.simb');
   const cred = capa.querySelector('.capa-creditos');
   const txt = capa.querySelector('.capa-texto');
-  let W = 0, H = 0, ox = 0, oy = 0, pedido = false;
+  let W = 0, H = 0, ox = 0, oy = 0;
+  // P = andamento da abertura, de 0 (só o nome PATEL) a 1 (foto inteira com o título)
+  let P = 0, t0 = 0, dur = 0, rodando = false, aberta = false, espera = null;
+  const ESPERA = 1100, DURACAO = 1500, RAPIDA = 550;
 
   const capHeight = fs => {
     const c = document.createElement('canvas').getContext('2d');
@@ -62,31 +66,53 @@ if (capa) {
   }
 
   function quadro() {
-    pedido = false;
-    const r = capa.getBoundingClientRect();
-    const total = Math.max(1, capa.offsetHeight - H);
-    const p = clamp(-r.top / total);
-    const z = clamp((p - 0.03) / 0.6);
+    const p = P;
+    const z = clamp(p / 0.82);
     const s = 1 + Math.pow(z, 2.7) * 80;
     zoom.setAttribute('transform', `translate(${ox} ${oy}) scale(${s}) translate(${-ox} ${-oy})`);
     svg.style.opacity = 1 - clamp((z - 0.8) / 0.2);
     svg.style.visibility = z >= 1 ? 'hidden' : 'visible';
-    const f = 1 - clamp(p / 0.1);
+    const f = 1 - clamp(p / 0.18);
     cab.style.opacity = f;
     cred.style.opacity = f;
     cred.style.transform = `translateY(${(1 - f) * 24}px)`;
     cred.style.visibility = f <= 0 ? 'hidden' : 'visible';
     foto.style.transform = `scale(${(1.16 - 0.16 * sai(z)).toFixed(4)})`;
-    const v = clamp((p - 0.6) / 0.2);
+    const v = clamp((p - 0.72) / 0.28);
     veu.style.opacity = v;
     txt.style.opacity = v;
     txt.style.transform = `translateY(${((1 - v) * 26).toFixed(1)}px)`;
     txt.style.visibility = v <= 0 ? 'hidden' : 'visible';
   }
 
-  const pede = () => { if (!pedido) { pedido = true; requestAnimationFrame(quadro); } };
-  addEventListener('scroll', pede, { passive: true });
   addEventListener('resize', () => requestAnimationFrame(medir));
+
+  const passo = agora => {
+    P = clamp((agora - t0) / dur);
+    quadro();
+    if (P < 1) requestAnimationFrame(passo); else termina();
+  };
+  const comeca = d => {
+    if (rodando || aberta) return;
+    rodando = true; dur = d; t0 = performance.now();
+    requestAnimationFrame(passo);
+  };
+  function termina() {
+    if (aberta) return;
+    aberta = true; P = 1; quadro();
+    capa.classList.add('aberta');
+    document.documentElement.classList.add('capa-aberta');
+    dispatchEvent(new Event('scroll')); // atualiza o topo e o botão fixo
+    try { sessionStorage.setItem('patel-abertura', '1'); } catch (e) {}
+  }
+  // rolou, tocou ou apertou tecla durante a abertura: termina rápido
+  const apressa = () => {
+    if (aberta) return;
+    clearTimeout(espera);
+    if (!rodando) comeca(RAPIDA);
+    else { dur = RAPIDA; t0 = performance.now() - P * dur; }
+  };
+  ['wheel', 'touchmove', 'keydown', 'scroll'].forEach(ev => addEventListener(ev, apressa, { passive: true }));
 
   // símbolo: desenha o contorno e depois preenche
   const tracos = [...simb.querySelectorAll('path')];
@@ -97,6 +123,12 @@ if (capa) {
     if (iniciou) return; iniciou = true;
     medir();
     requestAnimationFrame(() => capa.classList.add('pronta'));
+    let vista = false;
+    try { vista = sessionStorage.getItem('patel-abertura') === '1'; } catch (e) {}
+    const reduz = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // movimento reduzido, volta para a página na mesma visita ou link direto para uma seção: sem abertura
+    if (reduz || vista || scrollY > innerHeight * 0.4) termina();
+    else espera = setTimeout(() => comeca(DURACAO), ESPERA);
   };
   if (document.fonts && document.fonts.load) {
     Promise.all([document.fonts.load('400 100px Marcellus'), document.fonts.ready]).then(inicia, inicia);
@@ -109,7 +141,7 @@ if (capa) {
 const topo = document.getElementById('topo');
 const flut = document.querySelector('.flut');
 const marca = () => {
-  if (topo && !document.body.classList.contains('pagina')) topo.classList.toggle('solido', scrollY > 30);
+  if (topo && !document.body.classList.contains('pagina')) topo.classList.toggle('solido', scrollY > 30 || document.documentElement.classList.contains('capa-aberta'));
   if (flut) {
     const limite = capa ? capa.offsetHeight - innerHeight * 0.6 : innerHeight * 0.8;
     flut.classList.toggle('on', scrollY > limite);
